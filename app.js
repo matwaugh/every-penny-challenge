@@ -75,6 +75,7 @@
     suggestionTarget = null; saveSelection(); message('warning',''); render();
     if(focusSquare)document.querySelector(`[data-square="${focusSquare}"]:not(.hidden *)`)?.focus({preventScroll:true});
   }
+function publicSquareStatus(i){const status=state(i);return status==='pending'||status==='reserved'?'Awaiting approval':status==='approved'?'Approved':status==='selected'?'Your selection':'Available';}
 function measurePixelPositions(n){
   // Every cell lies on the same square lattice. Generate full glyph masks, then
   // trim or grow ONLY perimeter cells to reach precisely 200/500/1000 squares.
@@ -133,7 +134,19 @@ function measurePixelPositions(n){
   const coords=sorted.map(id=>({x:id%width,y:Math.floor(id/width)}));
   const minX=Math.min(...coords.map(p=>p.x)),maxX=Math.max(...coords.map(p=>p.x));
   const minY=Math.min(...coords.map(p=>p.y)),maxY=Math.max(...coords.map(p=>p.y));
-  return {cols:maxX-minX+1,rows:maxY-minY+1,positions:coords.map(p=>({x:p.x-minX,y:p.y-minY}))};
+  let positions=coords.map(p=>({x:p.x-minX,y:p.y-minY}));
+  let cols=maxX-minX+1;
+  // Tighten only the £10 glyph's empty bearings; never remove an actual square.
+  if(level===10){
+    const occupied=[...new Set(positions.map(p=>p.x))].sort((a,b)=>a-b);
+    const columnMap=new Map();let next=0,previous=-1;
+    for(const x of occupied){
+      if(previous>=0 && x-previous>1)next++; // One blank lattice column between glyphs.
+      columnMap.set(x,next++);previous=x;
+    }
+    positions=positions.map(p=>({x:columnMap.get(p.x),y:p.y}));cols=next;
+  }
+  return {cols,rows:maxY-minY+1,positions};
 }
 const artworkCache=new Map();
 function pixelPositions(n){if(!artworkCache.has(n))artworkCache.set(n,measurePixelPositions(n));return artworkCache.get(n);}
@@ -141,11 +154,12 @@ function artwork(){
   const n=level*100,{cols,rows,positions}=pixelPositions(n),root=el('mosaic');
   root.innerHTML='';
   const frame=root.parentElement;
-  const gap=2;
+  const gap=level===10?1:2;
   // Fit as large as possible in the frame, filling its width and height.
-  const availWidth=Math.max(260,frame.clientWidth-26);
+  frame.classList.toggle('compact-ten',level===10);
+  const availWidth=Math.max(180,frame.clientWidth-(level===10?16:26));
   const availHeight=Math.max(330,Math.min(650,window.innerHeight*.68));
-  const size=Math.max(5,Math.min(27,Math.floor((availWidth-(cols-1)*gap)/cols),Math.floor((availHeight-(rows-1)*gap)/rows)));
+  const size=Math.max(2,Math.min(27,Math.floor((availWidth-(cols-1)*gap)/cols),Math.floor((availHeight-(rows-1)*gap)/rows)));
   root.style.gridTemplateColumns=`repeat(${cols}, ${size}px)`;
   root.style.gridTemplateRows=`repeat(${rows}, ${size}px)`;
   root.style.gap=gap+'px';root.style.width='max-content';root.style.height='max-content';
@@ -154,7 +168,7 @@ function artwork(){
     const p=positions[i-1],b=document.createElement('button');
     b.className='tile '+state(i);b.dataset.square=i;
     b.style.cssText=`grid-column:${p.x+1};grid-row:${p.y+1};--hue:${hue(i)};width:${size}px;height:${size}px`;
-    const amountLabel=format(i)+(records[i]?' — '+records[i].name+' ('+records[i].status+')':' — '+state(i));
+    const amountLabel=format(i)+' — '+publicSquareStatus(i);
     b.setAttribute('aria-label',amountLabel);b.setAttribute('aria-pressed',String(selected.has(i)));b.disabled=Boolean(records[i])||Boolean(challenge().attempt);b.onclick=()=>toggle(i);fragment.append(b);
   }
   root.append(fragment);
@@ -188,7 +202,7 @@ function artwork(){
     for(let i=1;i<=level*100;i++) {
       const b=document.createElement('button'); b.className='gridcell '+state(i); b.dataset.square=i;
       b.style.setProperty('--hue',hue(i)); b.textContent=format(i);
-      b.setAttribute('aria-label',format(i)+' — '+state(i));
+      b.setAttribute('aria-label',format(i)+' — '+publicSquareStatus(i));
       b.setAttribute('aria-pressed',String(selected.has(i)));
       b.disabled=Boolean(records[i])||Boolean(challenge().attempt); b.onclick=()=>toggle(i); root.append(b);
     }
