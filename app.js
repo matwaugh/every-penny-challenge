@@ -154,11 +154,35 @@ function artwork(){
     const p=positions[i-1],b=document.createElement('button');
     b.className='tile '+state(i);b.dataset.square=i;
     b.style.cssText=`grid-column:${p.x+1};grid-row:${p.y+1};--hue:${hue(i)};width:${size}px;height:${size}px`;
-    b.title=format(i)+(records[i]?' — '+records[i].name+' ('+records[i].status+')':'');
-    b.setAttribute('aria-label',b.title);b.setAttribute('aria-pressed',String(selected.has(i)));b.disabled=Boolean(records[i])||Boolean(challenge().attempt);b.onclick=()=>toggle(i);fragment.append(b);
+    const amountLabel=format(i)+(records[i]?' — '+records[i].name+' ('+records[i].status+')':' — '+state(i));
+    b.setAttribute('aria-label',amountLabel);b.setAttribute('aria-pressed',String(selected.has(i)));b.disabled=Boolean(records[i])||Boolean(challenge().attempt);b.onclick=()=>toggle(i);fragment.append(b);
   }
   root.append(fragment);
 }
+  let hoverPosition=null;
+  function hideAmount(){el('amountTooltip').hidden=true;}
+  function showAmount(button,x,y){
+    const tooltip=el('amountTooltip');
+    tooltip.textContent=button.getAttribute('aria-label');tooltip.hidden=false;
+    const box=tooltip.getBoundingClientRect();
+    tooltip.style.left=Math.max(8,Math.min(x+12,window.innerWidth-box.width-8))+'px';
+    tooltip.style.top=(y+18+box.height>window.innerHeight?Math.max(8,y-box.height-12):y+18)+'px';
+  }
+  const squareAt=target=>target instanceof Element?target.closest('.tile,.gridcell'):null;
+  for(const type of ['pointerover','pointermove'])document.addEventListener(type,event=>{
+    if(event.pointerType==='touch')return;
+    hoverPosition={x:event.clientX,y:event.clientY};
+    const square=squareAt(event.target);if(square)showAmount(square,event.clientX,event.clientY);
+  });
+  document.addEventListener('pointerout',event=>{if(squareAt(event.target)!==squareAt(event.relatedTarget))hideAmount();});
+  document.addEventListener('focusin',event=>{const square=squareAt(event.target);if(square){const r=square.getBoundingClientRect();showAmount(square,r.left,r.bottom);}else hideAmount();});
+  document.addEventListener('focusout',hideAmount);
+  document.addEventListener('scroll',()=>{
+    if(el('amountTooltip').hidden || !hoverPosition)return;
+    const square=squareAt(document.elementFromPoint(hoverPosition.x,hoverPosition.y));
+    if(square)showAmount(square,hoverPosition.x,hoverPosition.y);else hideAmount();
+  },true);
+  window.addEventListener('resize',hideAmount);
   function drawGrid() {
     const root = el('grid'); root.replaceChildren();
     for(let i=1;i<=level*100;i++) {
@@ -171,6 +195,7 @@ function artwork(){
   }
   function render() {
     if (!db.owner) return;
+    hideAmount();
     refreshState(); const c=challenge(), n=level*100, figures=P.counts(c,n);
     el('mosaic').classList.toggle('hidden',view!=='mosaic'); el('grid').classList.toggle('hidden',view!=='grid');
     if(view==='mosaic') artwork(); else drawGrid();
@@ -203,7 +228,8 @@ function artwork(){
     }
     if(!selected.size) el('selectionList').textContent='No squares selected.';
     el('shuffle').disabled=!suggestionTarget || Boolean(c.attempt);
-    for(const id of ['suggest','clear','donationValue','donor','donormessage']) el(id).disabled=Boolean(c.attempt);
+    for(const id of ['clear','donationValue','donor','donormessage']) el(id).disabled=Boolean(c.attempt);
+    updateSuggestButton();
     document.querySelectorAll('[data-bundle]').forEach(b=>b.disabled=Boolean(c.attempt));
     const box=el('dashboardCounts'); box.replaceChildren();
     for(const status of ['approved','pending','reserved','available']) {
@@ -339,7 +365,7 @@ function artwork(){
   }
   function enterChallenge() {
     ownerMode=false; el('welcome').classList.add('hidden'); el('thankyou').classList.add('hidden'); el('campaignMain').classList.remove('hidden');
-    el('fundraiserInline').textContent=db.owner.name; el('fundraiserHeading').textContent=db.owner.name+"’s";
+    el('fundraiserInline').textContent=db.owner.name;
     refreshState(); el('donor').value=challenge().donor; el('donormessage').value=challenge().message;
     render(); window.scrollTo(0,0);
     if(!storageReady) message('campaignNotice','Session storage is unavailable. Checkout requires it so a claim cannot be lost.');
@@ -354,6 +380,11 @@ function artwork(){
   document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{
     view=b.dataset.view; document.querySelectorAll('[data-view]').forEach(x=>{x.classList.toggle('on',x===b);x.setAttribute('aria-pressed',String(x===b));}); render();
   });
+  function updateSuggestButton(){
+    const amount=P.parseMoney(el('donationValue').value);
+    el('suggest').disabled=!db.owner || Boolean(challenge().attempt) || amount===null || amount<P.MINIMUM;
+  }
+  el('donationValue').addEventListener('input',updateSuggestButton);
   el('suggest').onclick=()=>suggest(P.parseMoney(el('donationValue').value));
   el('shuffle').onclick=()=>suggest(suggestionTarget);
   el('donationValue').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();suggest(P.parseMoney(event.target.value));}});
