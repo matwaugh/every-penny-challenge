@@ -238,7 +238,7 @@ class BrowserTests(unittest.TestCase):
         self.context.grant_permissions(['clipboard-read','clipboard-write'])
         self.signup()
         self.reserve()
-        expected=self.page.locator('#checkoutSquares').text_content()
+        expected=self.page.evaluate("() => { const d=JSON.parse(sessionStorage.getItem('epc-group1-session-v1')); return d.challenges['alex@example.test:'+d.owner.level].attempt.amounts.map(n=>'£'+(n/100).toFixed(2)).join(' · '); }")
         self.page.locator('#simulateReturn').click()
         self.assertEqual(self.page.locator('#receiptSquares').text_content(),expected)
         ref=self.page.locator('#receiptRef').inner_text()

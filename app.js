@@ -272,14 +272,14 @@ function artwork(){
   function showCheckout(attempt) {
     checkoutAttempt={...attempt};
     el('checkoutAmount').textContent=format(attempt.amount); el('checkoutRef').textContent=attempt.ref;
-    el('checkoutSquares').textContent=attempt.amounts.map(format).join(' · ');
+    el('checkoutFundraiser').textContent=db.owner.name;
     message('checkoutError',''); el('simulateReturn').disabled=false;
     el('checkout').showModal(); updateClock();
   }
   function updateClock() {
     if(!el('checkout').open || !checkoutAttempt) return;
     const remaining=Math.max(0,checkoutAttempt.expiresAt-Date.now());
-    el('reservationClock').textContent=remaining ? `Reserved for ${Math.ceil(remaining/60000)} more minute${Math.ceil(remaining/60000)===1?'':'s'}.` : 'Reservation expired. Please review your selection.';
+    el('reservationClock').textContent=remaining ? `Your squares are reserved for ${Math.ceil(remaining/60000)} more minute${Math.ceil(remaining/60000)===1?'':'s'}.` : 'Reservation expired. Please review your selection.';
     el('simulateReturn').disabled=remaining===0;
     if(!remaining) message('checkoutError',`Reservation ${checkoutAttempt.ref} expired. Return to the challenge and review your selection. No claim was created.`);
   }
