@@ -30,13 +30,13 @@
       change(); sessionStorage.setItem(STORE, JSON.stringify(db)); storageReady = true; return true;
     } catch (error) {
       db = JSON.parse(old);
-      message('campaignNotice', 'Unable to save this demo action: ' + error.message + ' No change was applied.');
+      message('campaignNotice', 'Unable to save this action: ' + error.message + ' No change was applied.');
       return false;
     }
   }
   function persist() {
     try { sessionStorage.setItem(STORE, JSON.stringify(db)); storageReady = true; return true; }
-    catch { storageReady = false; message('campaignNotice','Browser session storage is unavailable. Enable it to use simulated checkout; no claim has been saved.'); return false; }
+    catch { storageReady = false; message('campaignNotice','Browser session storage is unavailable. Enable it to continue to checkout; no claim has been saved.'); return false; }
   }
   function warn(text) { message('warning', text); }
   function totalSelection() { return [...selected].reduce((a,b)=>a+b,0); }
@@ -48,12 +48,12 @@
     const c = challenge(), now = Date.now(); let changed = false;
     if (c.attempt && c.attempt.expiresAt <= now) {
       c.attempt = null; changed = true;
-      message('campaignNotice','The 30-minute reservation expired. No payment was taken. Review your available selection before starting again.');
+      message('campaignNotice','The 30-minute reservation expired. Review your available selection before starting again.');
     }
     if (now - c.updatedAt >= P.RECOVERY_MS && (c.selection.length || c.donor || c.message)) {
       c.selection = []; c.donor = ''; c.message = ''; selected.clear();
       el('donor').value = ''; el('donormessage').value = ''; changed = true;
-      message('campaignNotice','The one-hour selection recovery period ended. Enter fresh fictional details to continue.');
+      message('campaignNotice','Your saved selection has expired. Please choose your squares again.');
     }
     if (changed) persist();
     const allowed = new Set(P.available({...c, attempt: null},level*100,now));
@@ -176,7 +176,8 @@ function artwork(){
     if(view==='mosaic') artwork(); else drawGrid();
     const sum=totalSelection();
     el('total').textContent=format(sum); el('chosen').textContent=selected.size+' square'+(selected.size===1?'':'s');
-    el('minnote').textContent=sum<200 ? (sum ? `Add ${format(200-sum)} more to reach the £2.00 minimum.` : 'Select at least £2.00 to continue.') : 'Minimum donation met. Review your selection before checkout.';
+    el('minnote').textContent='£2 minimum donation';
+    if(sum>0 && sum<200)warn(`Add ${format(200-sum)} more to reach the £2 minimum donation.`);
     el('donate').disabled=sum<200 || !storageReady || Boolean(c.attempt);
     el('resume').classList.toggle('hidden',!c.attempt);
     el('raised').textContent=format(figures.amount); el('claimed').textContent=`${figures.approved} / ${n}`;
@@ -184,14 +185,13 @@ function artwork(){
     el('progress').style.width=(figures.approved/n*100)+'%';
     el('progress').parentElement.setAttribute('aria-valuenow',String(figures.approved/n*100));
     el('progress').parentElement.setAttribute('aria-valuetext',P.progress(figures.approved,n)+' of squares approved');
-    el('target').textContent=format(n*(n+1)/2);
     const begun=c.claims.some(x=>x.status!=='released') || Boolean(c.attempt);
     el('changeChallenge').classList.toggle('hidden',begun);
     el('contactHelp').classList.add('hidden');
     const available=P.available(c,n), remaining=available.reduce((a,b)=>a+b,0);
     let nextNotice='';
-    if(figures.approved===n) nextNotice='Challenge complete! Every square has been approved in this simulation.';
-    else if(remaining>0 && remaining<200 && !c.attempt) nextNotice=`Only ${format(remaining)} of squares is available, below the £2 minimum. Checkout is unavailable for this remainder in Group 1. Pending or reserved squares may become available; the production completion exception remains undecided.`;
+    if(figures.approved===n) nextNotice='Challenge complete! Every square has been approved.';
+    else if(remaining>0 && remaining<200 && !c.attempt) nextNotice=`Only ${format(remaining)} of squares is available, below the £2 minimum. Please check back if pending or reserved squares become available.`;
     else if(!available.length && figures.approved!==n) nextNotice='All squares are approved, pending or temporarily reserved. Further selection is unavailable until squares are released.';
     if(nextNotice || automaticNotice)message('campaignNotice',nextNotice);
     automaticNotice=nextNotice;
@@ -203,7 +203,7 @@ function artwork(){
     }
     if(!selected.size) el('selectionList').textContent='No squares selected.';
     el('shuffle').disabled=!suggestionTarget || Boolean(c.attempt);
-    for(const id of ['suggest','clear','manual','donationValue','donor','donormessage']) el(id).disabled=Boolean(c.attempt);
+    for(const id of ['suggest','clear','donationValue','donor','donormessage']) el(id).disabled=Boolean(c.attempt);
     document.querySelectorAll('[data-bundle]').forEach(b=>b.disabled=Boolean(c.attempt));
     const box=el('dashboardCounts'); box.replaceChildren();
     for(const status of ['approved','pending','reserved','available']) {
@@ -233,7 +233,7 @@ function artwork(){
   function beginCheckout() {
     refreshState(); const c=challenge();
     if(c.attempt) { showCheckout(c.attempt); return; }
-    if(!el('donor').value.trim()){warn('Enter a fictional donor name before continuing.');el('donor').focus();return;}
+    if(!el('donor').value.trim()){warn('Please enter your name before continuing.');el('donor').focus();return;}
     if(totalSelection()<P.MINIMUM){warn('Select at least £2.00 before continuing.');return;}
     let attempt;
     if(!transaction(()=>{
@@ -253,14 +253,14 @@ function artwork(){
   function updateClock() {
     if(!el('checkout').open || !checkoutAttempt) return;
     const remaining=Math.max(0,checkoutAttempt.expiresAt-Date.now());
-    el('reservationClock').textContent=remaining ? `Reserved for ${Math.ceil(remaining/60000)} more minute${Math.ceil(remaining/60000)===1?'':'s'}.` : 'Reservation expired. No payment was taken.';
+    el('reservationClock').textContent=remaining ? `Reserved for ${Math.ceil(remaining/60000)} more minute${Math.ceil(remaining/60000)===1?'':'s'}.` : 'Reservation expired. Please review your selection.';
     el('simulateReturn').disabled=remaining===0;
     if(!remaining) message('checkoutError',`Reservation ${checkoutAttempt.ref} expired. Return to the challenge and review your selection. No claim was created.`);
   }
   function cancelCheckout() {
     if(!transaction(()=>{challenge().attempt=null;})) return;
     el('checkout').close(); checkoutAttempt=null; render();
-    message('campaignNotice','Checkout cancelled. No payment was taken. Eligible squares and fictional details have been kept for up to one hour.');
+    message('campaignNotice','Checkout cancelled. Your available squares and details have been kept for up to one hour.');
     el('donate').focus();
   }
   function finishCheckout() {
@@ -280,16 +280,16 @@ function artwork(){
     el('welcome').classList.add('hidden'); el('campaignMain').classList.add('hidden'); el('thankyou').classList.remove('hidden');
     const receipt=db.receipt;
     el('receiptPrivate').classList.toggle('hidden',!receipt);
-    el('receiptChallenge').textContent=receipt?receipt.challengeName:'Thank you for visiting the Every Penny Challenge demo.';
+    el('receiptChallenge').textContent=receipt?receipt.challengeName:'Thank you for supporting the Every Penny Challenge.';
     if(receipt) {
       el('receiptAmount').textContent=format(receipt.amount); el('receiptSquares').textContent=receipt.amounts.map(format).join(' · ');
       el('receiptRef').textContent=receipt.ref;
       const claim=Object.values(db.challenges).flatMap(c=>c.claims).find(c=>c.ref===receipt.ref);
       const status=claim?.status || 'pending';
       const statusText=el('receiptStatus');
-      statusText.textContent=status==='pending'?'Claimed, awaiting approval. These squares do not count towards approved progress yet. No approval deadline is promised.':status==='approved'?'Approved in this simulation. No real payment was verified.':'This simulated claim has been released; its squares are available again.';
+      statusText.textContent=status==='pending'?'Claimed, awaiting approval. These squares do not count towards approved progress yet. No approval deadline is promised.':status==='approved'?'Approved. Thank you for your support.':'This claim has been released; its squares are available again.';
     }
-    el('receiptNotice').textContent=receipt?'':'Detailed acknowledgements are available only in the original browser session. No payment has been verified.';
+    el('receiptNotice').textContent=receipt?'':'Detailed acknowledgements are available only in the original browser session. ';
     el('thankyou').focus(); window.scrollTo(0,0);
   }
   function dashboardNotice(text) {
@@ -297,12 +297,12 @@ function artwork(){
     noticeTimer=setTimeout(()=>message('dashboardNotice',''),5000);
   }
   function reviewAction(ref,action,button) {
-    if(!ownerMode) { dashboardNotice('Enter demo owner review mode first.'); return; }
-    if(!confirm(action==='approved'?`Approve simulated claim ${ref}? This does not verify a real payment.`:`Release simulated claim ${ref}? Its squares will become available again.`)) return;
+    if(!ownerMode) { dashboardNotice('Open the fundraiser controls first.'); return; }
+    if(!confirm(action==='approved'?`Approve claim ${ref}?`:`Release claim ${ref}? Its squares will become available again.`)) return;
     button.disabled=true; button.textContent='Processing…';
     try {
       if(!transaction(()=>P.review(challenge(),ref,action))) { dashboardNotice('The action was not saved. No change was applied.'); return; }
-      render(); dashboardNotice(`Claim ${ref} ${action==='approved'?'approved':'released'} in the demo.`);
+      render(); dashboardNotice(`Claim ${ref} ${action==='approved'?'approved':'released'}.`);
     } finally { button.disabled=false; }
   }
   function renderQueue() {
@@ -324,7 +324,7 @@ function artwork(){
       summary.textContent='Review claimed squares'; amounts.className='amounts'; amounts.textContent=claim.amounts.map(format).join(' · ');
       disclosure.append(summary,amounts); left.append(disclosure);
       const buttons=document.createElement('div'); buttons.className='row';
-      for(const [action,label] of [['approved','Approve demo claim'],['released','Release squares']]) {
+      for(const [action,label] of [['approved','Approve claim'],['released','Release squares']]) {
         const b=document.createElement('button'); b.textContent=label;
         if(action==='released') b.className='release';
         b.onclick=()=>reviewAction(claim.ref,action,b); buttons.append(b);
@@ -342,7 +342,7 @@ function artwork(){
     el('fundraiserInline').textContent=db.owner.name; el('fundraiserHeading').textContent=db.owner.name+"’s";
     refreshState(); el('donor').value=challenge().donor; el('donormessage').value=challenge().message;
     render(); window.scrollTo(0,0);
-    if(!storageReady) message('campaignNotice','Session storage is unavailable. Simulated checkout requires it so a claim cannot be lost silently.');
+    if(!storageReady) message('campaignNotice','Session storage is unavailable. Checkout requires it so a claim cannot be lost.');
   }
   function setPick(value) {
     pickedLevel=value;
@@ -357,10 +357,6 @@ function artwork(){
   el('suggest').onclick=()=>suggest(P.parseMoney(el('donationValue').value));
   el('shuffle').onclick=()=>suggest(suggestionTarget);
   el('donationValue').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();suggest(P.parseMoney(event.target.value));}});
-  el('manual').onclick=()=>{
-    document.querySelector('[data-view="grid"]').click(); el('grid').scrollIntoView({behavior:'smooth',block:'center'});
-    const first=el('grid').querySelector('button:not(:disabled)'); if(first) first.focus({preventScroll:true});
-  };
   el('clear').onclick=()=>{selected.clear();suggestionTarget=null;saveSelection();warn('');render();};
   for(const id of ['donor','donormessage']) el(id).addEventListener('input',()=>{
     challenge()[id==='donor'?'donor':'message']=el(id).value; challenge().updatedAt=Date.now();persist();
@@ -371,22 +367,19 @@ function artwork(){
   el('checkout').addEventListener('cancel',event=>{event.preventDefault();cancelCheckout();});
   el('startChallenge').onclick=()=>{
     const name=el('ownerName').value.trim(),email=el('ownerEmail').value.trim().toLowerCase();
-    if(!name||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){el('signupError').textContent='Enter a fictional first name and a valid demo email (for example alex@example.test).';return;}
+    if(!name||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){el('signupError').textContent='Enter your first name and a valid email address.';return;}
     db.owner={name,email,level:pickedLevel};level=pickedLevel;el('signupError').textContent='';persist();cleanURL();enterChallenge();
   };
   el('changeChallenge').onclick=()=>{
     if(challenge().claims.some(c=>c.status!=='released')||challenge().attempt)return;
     setPick(level);el('campaignMain').classList.add('hidden');el('welcome').classList.remove('hidden');window.scrollTo(0,0);
   };
-  el('backWelcome').onclick=()=>{
-    db.owner=null;persist();selected.clear();ownerMode=false;cleanURL();el('campaignMain').classList.add('hidden');el('welcome').classList.remove('hidden');window.scrollTo(0,0);
-  };
   el('ownerUnlock').onclick=()=>{ownerMode=true;renderOwner();};el('ownerLock').onclick=()=>{ownerMode=false;renderOwner();};
   el('reset').onclick=()=>{
     if(!ownerMode)return;
-    if(!confirm('Reset all simulated claims and selections for this challenge? No real payments are affected.'))return;
+    if(!confirm('Reset all claims and selections for this challenge?'))return;
     if(!transaction(()=>{delete db.challenges[challengeKey()];db.receipt=null;}))return;
-    selected.clear();el('donor').value='';el('donormessage').value='';message('campaignNotice','');render();dashboardNotice('This demo challenge has been reset.');
+    selected.clear();el('donor').value='';el('donormessage').value='';message('campaignNotice','');render();dashboardNotice('This challenge has been reset.');
   };
   el('viewChallenge').onclick=()=>{history.pushState(null,'',location.pathname);if(db.owner)enterChallenge();else{el('thankyou').classList.add('hidden');el('welcome').classList.remove('hidden');}};
   async function copyText(text) {
@@ -400,8 +393,8 @@ function artwork(){
   el('shareChallenge').onclick=async()=>{
     const url=location.origin+location.pathname;
     try {
-      if(navigator.share)await navigator.share({title:'Every Penny Challenge — protected demo',url});
-      else {await copyText(url);el('receiptNotice').textContent='Protected demo link copied. Your fictional challenge details are not shared.';}
+      if(navigator.share)await navigator.share({title:'Every Penny Challenge',url});
+      else {await copyText(url);el('receiptNotice').textContent='Challenge link copied.';}
     }catch(error){if(error.name!=='AbortError')el('receiptNotice').textContent='Sharing was unavailable. Copy the challenge address from your browser.';}
   };
   window.addEventListener('popstate',()=>{if(new URLSearchParams(location.search).has('thankyou'))showReceipt();else if(db.owner)enterChallenge();else {el('thankyou').classList.add('hidden');el('campaignMain').classList.add('hidden');el('welcome').classList.remove('hidden');}});

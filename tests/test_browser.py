@@ -68,12 +68,13 @@ class BrowserTests(unittest.TestCase):
         self.page.reload()
 
     def test_complete_donor_and_review_journey_desktop_and_mobile(self):
-        for width, level, expected in [(1280,2,'£201.00'),(390,5,'£1252.50'),(360,10,'£5005.00')]:
+        for width, level in [(1280,2),(390,5),(360,10)]:
             with self.subTest(width=width, level=level):
                 self.page.set_viewport_size({'width':width,'height':844})
                 self.signup(level)
                 self.assertEqual(self.page.locator('#mosaic .tile').count(),level*100)
-                self.assertEqual(self.page.locator('#target').inner_text(),expected)
+                self.assertEqual(self.page.locator('.stats .stat').count(),2)
+                self.assertEqual(self.page.locator('#target').count(),0)
                 self.assertTrue(self.page.locator('#donate').is_disabled())
                 self.page.locator('[data-bundle="1000"]').click()
                 self.assertEqual(self.page.locator('#total').inner_text(),'£10.00')
@@ -105,10 +106,10 @@ class BrowserTests(unittest.TestCase):
                 self.page.locator('#ownerUnlock').click()
                 self.assertEqual(self.page.locator('#queue b').count(),1, 'Donor message is rendered as text')
                 self.page.once('dialog',lambda dialog: dialog.accept())
-                self.page.get_by_role('button',name='Approve demo claim',exact=True).click()
+                self.page.get_by_role('button',name='Approve claim',exact=True).click()
                 self.assertEqual(self.dashboard_counts(),[number,0,0,level*100-number])
                 self.assertEqual(self.page.locator('#raised').inner_text(),'£10.00')
-                self.assertIn('approved in the demo',self.page.locator('#dashboardNotice').inner_text())
+                self.assertIn('approved.',self.page.locator('#dashboardNotice').inner_text())
                 self.page.reload()
                 self.assertEqual(self.page.locator('#raised').inner_text(),'£10.00')
                 self.assertFalse(self.page.locator('#ownerBar').is_visible())
@@ -119,17 +120,18 @@ class BrowserTests(unittest.TestCase):
 
     def test_manual_selection_minimum_shuffle_and_invalid_input(self):
         self.signup()
-        self.page.locator('#manual').click()
+        self.page.locator('[data-view="grid"]').click()
         grid=self.page.locator('#grid button')
         grid.nth(0).click()
         self.assertTrue(self.page.locator('#donate').is_disabled())
-        self.assertIn('£1.99',self.page.locator('#minnote').inner_text())
+        self.assertEqual(self.page.locator('#minnote').inner_text(),'£2 minimum donation')
+        self.assertIn('£1.99',self.page.locator('#warning').inner_text())
         grid.nth(198).click()
         self.assertEqual(self.page.locator('#total').inner_text(),'£2.00')
         self.assertFalse(self.page.locator('#donate').is_disabled())
         self.page.locator('#donate').click()
         self.assertFalse(self.page.locator('#checkout').is_visible())
-        self.assertIn('fictional donor name',self.page.locator('#warning').inner_text())
+        self.assertIn('enter your name',self.page.locator('#warning').inner_text())
         self.page.locator('[data-bundle="1000"]').click()
         original=self.page.locator('#selectionList').text_content()
         self.page.locator('#shuffle').click()
@@ -219,7 +221,7 @@ class BrowserTests(unittest.TestCase):
 
     def test_grid_keyboard_focus_and_no_edit_during_reservation(self):
         self.signup()
-        self.page.locator('#manual').click()
+        self.page.locator('[data-view="grid"]').click()
         self.page.locator('#grid button').nth(199).focus()
         self.page.keyboard.press('Enter')
         self.assertEqual(self.page.locator('#total').inner_text(),'£2.00')
@@ -247,9 +249,9 @@ class BrowserTests(unittest.TestCase):
         self.page.locator('#viewChallenge').click()
         self.page.locator('#ownerUnlock').click()
         self.page.once('dialog',lambda dialog:dialog.accept())
-        self.page.get_by_role('button',name='Approve demo claim',exact=True).click()
+        self.page.get_by_role('button',name='Approve claim',exact=True).click()
         self.page.go_back()
-        self.assertIn('Approved in this simulation',self.page.locator('#receiptStatus').inner_text())
+        self.assertIn('Approved.',self.page.locator('#receiptStatus').inner_text())
         self.assertEqual(self.page.locator('#receiptSquares').text_content(),expected)
 
     def test_session_storage_failure_prevents_checkout(self):

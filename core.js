@@ -96,7 +96,7 @@
   }
   function start(challenge, amounts, donor, message, total, now, ref) {
     const sum = amounts.reduce((a,b) => a+b,0);
-    if (!donor.trim()) throw new Error('Enter a fictional donor name.');
+    if (!donor.trim()) throw new Error('Please enter your name.');
     if (!amounts.length || sum < MINIMUM) throw new Error('Select at least £2.00 before continuing.');
     if (new Set(amounts).size !== amounts.length) throw new Error('A square can only be selected once.');
     // Replacing an attempt releases its old reservation; claims remain unavailable.
@@ -106,10 +106,10 @@
     return challenge.attempt;
   }
   function finish(challenge, ref, now) {
-    if (challenge.claims.some(c => c.ref === ref)) throw new Error('This simulated return has already been processed.');
+    if (challenge.claims.some(c => c.ref === ref)) throw new Error('This return has already been processed.');
     const attempt = challenge.attempt;
     if (!attempt || attempt.ref !== ref) throw new Error('This checkout attempt is no longer active. No claim was created.');
-    if (attempt.expiresAt <= now) throw new Error('The reservation has expired. No payment was taken. Return and select available squares again.');
+    if (attempt.expiresAt <= now) throw new Error('The reservation has expired. Return and select available squares again.');
     const claim = {...attempt, status: 'pending'};
     challenge.claims.push(claim); challenge.attempt = null;
     return claim;

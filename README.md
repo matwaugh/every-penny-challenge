@@ -1,6 +1,6 @@
 # Every Penny Challenge
 
-A front-end demonstration for OSCAR’s Paediatric Brain Tumour Charity. Group 1 extends the original artwork and manual grid with square-based progress, automatic selection, simulated reservations and checkout, acknowledgements, and owner review.
+A front-end demonstration for OSCAR’s Paediatric Brain Tumour Charity. The interface keeps the simulation warning in the top strip, with the supplied original charity logo in the coloured challenge panel; other wording follows the intended donor experience. Donors have no application account or sign-out control. Manual selection remains available directly through the artwork/grid; Shuffle and clear sit together. Group 1 extends the original artwork and manual grid with square-based progress, automatic selection, simulated reservations and checkout, acknowledgements, and owner review.
 
 **No real payments are taken. Use fictional details only.** There are no application accounts, backend, donor email collection, payment integration or cross-device state.
 
