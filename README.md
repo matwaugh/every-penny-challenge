@@ -1,1 +1,0 @@
-# every-penny-challenge
