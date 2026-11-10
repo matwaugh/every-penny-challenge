@@ -252,6 +252,37 @@ class BrowserTests(unittest.TestCase):
         self.assertIn('Approved.',self.page.locator('#receiptStatus').inner_text())
         self.assertEqual(self.page.locator('#receiptSquares').text_content(),expected)
 
+    def test_artwork_switches_preserve_exact_allocations_and_selection(self):
+        for level in [2,5,10]:
+            with self.subTest(level=level):
+                self.signup(level)
+                self.page.locator('[data-bundle="1000"]').click()
+                selected=self.page.locator('.tile.selected').evaluate_all('(nodes)=>nodes.map(n=>n.dataset.square)')
+                for style in ['digits','sun','flower']:
+                    self.page.locator(f'[data-artwork="{style}"]').click()
+                    self.assertEqual(self.page.locator('.tile').count(),level*100)
+                    self.assertEqual(self.page.locator('.tile.selected').evaluate_all('(nodes)=>nodes.map(n=>n.dataset.square)'),selected)
+                    self.assertEqual(self.page.locator('#total').inner_text(),'£10.00')
+                    self.assertEqual(self.page.locator('[data-artwork][aria-pressed="true"]').count(),1)
+                    self.assertEqual(self.page.locator('#mosaic svg').get_attribute('viewBox').count(' '),3)
+                self.page.locator('[data-view="grid"]').click()
+                self.assertEqual(self.page.locator('.gridcell.selected').evaluate_all('(nodes)=>nodes.map(n=>n.dataset.square)'),selected)
+                self.page.locator('[data-artwork="digits"]').click()
+                self.assertEqual(self.page.locator('#total').inner_text(),'£10.00')
+                self.page.evaluate('sessionStorage.clear()')
+                self.page.goto(self.url)
+
+    def test_vector_artwork_supports_keyboard_selection(self):
+        self.signup()
+        self.page.locator('[data-artwork="flower"]').click()
+        tile=self.page.locator('.tile[data-square="200"]')
+        tile.focus()
+        self.page.keyboard.press('Enter')
+        self.assertEqual(self.page.locator('#total').inner_text(),'£2.00')
+        self.assertEqual(self.page.evaluate('document.activeElement.dataset.square'),'200')
+        self.page.keyboard.press('Space')
+        self.assertEqual(self.page.locator('#total').inner_text(),'£0.00')
+
     def test_session_storage_failure_prevents_checkout(self):
         self.page.add_init_script("Storage.prototype.setItem=()=>{throw new Error('Storage unavailable')}")
         self.page.reload()

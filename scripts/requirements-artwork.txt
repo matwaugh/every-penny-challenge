@@ -1,0 +1,5 @@
+# Optional development tools for regenerating committed vector artwork.
+# The application itself has no Python or package dependencies.
+matplotlib==3.10.8
+numpy==2.3.5
+shapely==2.1.2

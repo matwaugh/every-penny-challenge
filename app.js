@@ -65,7 +65,6 @@
     if(c.attempt) c.attempt.amounts.forEach(i=>records[i]={status:'reserved',name:'Checkout reservation'});
   }
   function state(i) { return records[i]?.status || (selected.has(i)?'selected':'available'); }
-  function hue(i) { return `hsl(${Math.round(195+285*(i-1)/(level*100))%360} 74% 67%)`; }
   function toggle(i) {
     refreshState();
     if(challenge().attempt) { warn('Resume or cancel the active checkout before editing your selection.'); return; }
@@ -76,103 +75,40 @@
     if(focusSquare)document.querySelector(`[data-square="${focusSquare}"]:not(.hidden *)`)?.focus({preventScroll:true});
   }
 function publicSquareStatus(i){const status=state(i);return status==='pending'||status==='reserved'?'Awaiting approval':status==='approved'?'Approved':status==='selected'?'Your selection':'Available';}
-function measurePixelPositions(n){
-  // Every cell lies on the same square lattice. Generate full glyph masks, then
-  // trim or grow ONLY perimeter cells to reach precisely 200/500/1000 squares.
-  const text='£'+level;
-  const measure=document.createElement('canvas').getContext('2d');
-  let best=null;
-  for(let rows=18;rows<=72;rows++){
-    const size=rows*12;
-    measure.font=`900 ${Math.round(size*.84)}px Arial Black,Arial,sans-serif`;
-    const width=Math.ceil(measure.measureText(text).width/12)+6;
-    if(width>140)continue;
-    const can=document.createElement('canvas');can.width=width*12;can.height=size;
-    const ctx=can.getContext('2d');ctx.fillStyle='#000';ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.font=measure.font;ctx.fillText(text,can.width/2,can.height/2+size*.035);
-    const data=ctx.getImageData(0,0,can.width,can.height).data;
-    const cells=new Set();
-    for(let y=0;y<rows;y++)for(let x=0;x<width;x++){
-      let hits=0;
-      for(let yy=2;yy<12;yy+=3)for(let xx=2;xx<12;xx+=3){if(data[((y*12+yy)*can.width+x*12+xx)*4+3]>128)hits++}
-      if(hits>=8)cells.add(y*width+x);
-    }
-    const error=Math.abs(cells.size-n);
-    // Prefer a nearly exact dense glyph, so almost no pixels need adjustment.
-    if(!best||error<best.error)best={width,rows,cells,error};
-    if(error===0)break;
+  const SVG='http://www.w3.org/2000/svg';
+  let artworkStyle='digits';
+  function svgElement(name,attributes={}){
+    const node=document.createElementNS(SVG,name);
+    for(const [key,value] of Object.entries(attributes))node.setAttribute(key,String(value));
+    return node;
   }
-  const {width,rows,cells}=best;
-  const neighbours=(id)=>{
-    const x=id%width,y=Math.floor(id/width);
-    return [[x-1,y],[x+1,y],[x,y-1],[x,y+1]].filter(([a,b])=>a>=0&&a<width&&b>=0&&b<rows).map(([a,b])=>b*width+a);
-  };
-  // Adjust only on the outer outline. Never randomly skip interior pixels.
-  while(cells.size>n){
-    let options=[...cells].filter(id=>neighbours(id).some(v=>!cells.has(v)));
-    options.sort((a,b)=>{
-      const da=neighbours(a).filter(v=>cells.has(v)).length;
-      const db=neighbours(b).filter(v=>cells.has(v)).length;
-      return da-db || a-b;
+  function artwork(){
+    const data=window.PennyArtwork[level][artworkStyle], root=el('mosaic');
+    root.replaceChildren();root.removeAttribute('style');
+    const frame=root.parentElement;frame.classList.remove('compact-ten');
+    const svg=svgElement('svg',{viewBox:data.viewBox.join(' '),'aria-label':artworkStyle==='digits'?`${level} — choose penny amounts`:artworkStyle==='sun'?'Sun — choose penny amounts':'Flower — choose penny amounts'});
+    const defs=svgElement('defs');
+    const clip=svgElement('clipPath',{id:'artwork-contour'});
+    clip.append(svgElement('path',{d:data.outline,'clip-rule':'evenodd'}));defs.append(clip);
+    const pattern=svgElement('pattern',{id:'selection-stripes',width:9,height:9,patternUnits:'userSpaceOnUse',patternTransform:'rotate(40)'});
+    pattern.append(svgElement('rect',{width:9,height:9,fill:'#6534bd'}),svgElement('rect',{width:2.4,height:9,fill:'#d6bcff'}));defs.append(pattern);svg.append(defs);
+    const tiles=svgElement('g',{'clip-path':'url(#artwork-contour)'});
+    data.cells.forEach((cell,index)=>{
+      const i=index+1, status=state(i),disabled=Boolean(records[i])||Boolean(challenge().attempt);
+      const tile=svgElement('g',{'class':'tile '+status,'data-square':i,role:'button',tabindex:disabled?-1:0,'aria-disabled':disabled,'aria-pressed':selected.has(i),'aria-label':format(i)+' — '+publicSquareStatus(i)});
+      tile.style.setProperty('--tile-colour',cell.colour);
+      tile.append(svgElement('path',{d:cell.d,'class':'tile-shape','fill-rule':'evenodd'}));
+      if(!disabled){tile.onclick=()=>toggle(i);tile.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();toggle(i);}};}
+      tiles.append(tile);
     });
-    if(!options.length)break;
-    cells.delete(options[0]);
-  }
-  while(cells.size<n){
-    let border=new Set();
-    for(const id of cells)for(const other of neighbours(id))if(!cells.has(other))border.add(other);
-    let options=[...border];
-    options.sort((a,b)=>{
-      const da=neighbours(a).filter(v=>cells.has(v)).length;
-      const db=neighbours(b).filter(v=>cells.has(v)).length;
-      return db-da || a-b;
+    svg.append(tiles);root.append(svg);
+    document.querySelectorAll('[data-artwork]').forEach(button=>{
+      const active=button.dataset.artwork===artworkStyle;
+      button.classList.toggle('on',active);button.setAttribute('aria-pressed',String(active));
     });
-    if(!options.length)break;
-    cells.add(options[0]);
+    const palette=artworkStyle==='sun'?'linear-gradient(#ffe16a,#ffab43,#ed6949)':artworkStyle==='flower'?'linear-gradient(#f9d846,#6cc67e,#36b7bf,#7380d7,#ee9dbf)':'linear-gradient(#f45c70,#ff9245,#f3ca3e,#7ec86d,#31b6b4,#508bd8,#9465d4)';
+    el('campaignMain').style.setProperty('--artwork-palette',palette);
   }
-  const sorted=[...cells].sort((a,b)=>a-b);
-  const coords=sorted.map(id=>({x:id%width,y:Math.floor(id/width)}));
-  const minX=Math.min(...coords.map(p=>p.x)),maxX=Math.max(...coords.map(p=>p.x));
-  const minY=Math.min(...coords.map(p=>p.y)),maxY=Math.max(...coords.map(p=>p.y));
-  let positions=coords.map(p=>({x:p.x-minX,y:p.y-minY}));
-  let cols=maxX-minX+1;
-  // Tighten only the £10 glyph's empty bearings; never remove an actual square.
-  if(level===10){
-    const occupied=[...new Set(positions.map(p=>p.x))].sort((a,b)=>a-b);
-    const columnMap=new Map();let next=0,previous=-1;
-    for(const x of occupied){
-      if(previous>=0 && x-previous>1)next++; // One blank lattice column between glyphs.
-      columnMap.set(x,next++);previous=x;
-    }
-    positions=positions.map(p=>({x:columnMap.get(p.x),y:p.y}));cols=next;
-  }
-  return {cols,rows:maxY-minY+1,positions};
-}
-const artworkCache=new Map();
-function pixelPositions(n){if(!artworkCache.has(n))artworkCache.set(n,measurePixelPositions(n));return artworkCache.get(n);}
-function artwork(){
-  const n=level*100,{cols,rows,positions}=pixelPositions(n),root=el('mosaic');
-  root.innerHTML='';
-  const frame=root.parentElement;
-  const gap=level===10?1:2;
-  // Fit as large as possible in the frame, filling its width and height.
-  frame.classList.toggle('compact-ten',level===10);
-  const availWidth=Math.max(180,frame.clientWidth-(level===10?16:26));
-  const availHeight=Math.max(330,Math.min(650,window.innerHeight*.68));
-  const size=Math.max(2,Math.min(27,Math.floor((availWidth-(cols-1)*gap)/cols),Math.floor((availHeight-(rows-1)*gap)/rows)));
-  root.style.gridTemplateColumns=`repeat(${cols}, ${size}px)`;
-  root.style.gridTemplateRows=`repeat(${rows}, ${size}px)`;
-  root.style.gap=gap+'px';root.style.width='max-content';root.style.height='max-content';
-  const fragment=document.createDocumentFragment();
-  for(let i=1;i<=n;i++){
-    const p=positions[i-1],b=document.createElement('button');
-    b.className='tile '+state(i);b.dataset.square=i;
-    b.style.cssText=`grid-column:${p.x+1};grid-row:${p.y+1};--hue:${hue(i)};width:${size}px;height:${size}px`;
-    const amountLabel=format(i)+' — '+publicSquareStatus(i);
-    b.setAttribute('aria-label',amountLabel);b.setAttribute('aria-pressed',String(selected.has(i)));b.disabled=Boolean(records[i])||Boolean(challenge().attempt);b.onclick=()=>toggle(i);fragment.append(b);
-  }
-  root.append(fragment);
-}
   let hoverPosition=null;
   function hideAmount(){el('amountTooltip').hidden=true;}
   function showAmount(button,x,y){
@@ -201,7 +137,7 @@ function artwork(){
     const root = el('grid'); root.replaceChildren();
     for(let i=1;i<=level*100;i++) {
       const b=document.createElement('button'); b.className='gridcell '+state(i); b.dataset.square=i;
-      b.style.setProperty('--hue',hue(i)); b.textContent=format(i);
+      b.style.setProperty('--tile-colour',window.PennyArtwork[level][artworkStyle].cells[i-1].colour); b.textContent=format(i);
       b.setAttribute('aria-label',format(i)+' — '+publicSquareStatus(i));
       b.setAttribute('aria-pressed',String(selected.has(i)));
       b.disabled=Boolean(records[i])||Boolean(challenge().attempt); b.onclick=()=>toggle(i); root.append(b);
@@ -212,7 +148,7 @@ function artwork(){
     hideAmount();
     refreshState(); const c=challenge(), n=level*100, figures=P.counts(c,n);
     el('mosaic').classList.toggle('hidden',view!=='mosaic'); el('grid').classList.toggle('hidden',view!=='grid');
-    if(view==='mosaic') artwork(); else drawGrid();
+    artwork(); if(view==='grid')drawGrid();
     const sum=totalSelection();
     el('total').textContent=format(sum); el('chosen').textContent=selected.size+' square'+(selected.size===1?'':'s');
     if(sum>0 && sum<200)warn(`Add ${format(200-sum)} more to reach the £2 minimum donation.`);
@@ -390,6 +326,7 @@ function artwork(){
   function cleanURL() { history.replaceState(null,'',location.pathname); }
   document.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>setPick(+b.dataset.pick));
   document.querySelectorAll('[data-bundle]').forEach(b=>b.onclick=()=>suggest(+b.dataset.bundle));
+  document.querySelectorAll('[data-artwork]').forEach(button=>button.onclick=()=>{artworkStyle=button.dataset.artwork;render();});
   document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{
     view=b.dataset.view; document.querySelectorAll('[data-view]').forEach(x=>{x.classList.toggle('on',x===b);x.setAttribute('aria-pressed',String(x===b));}); render();
   });
