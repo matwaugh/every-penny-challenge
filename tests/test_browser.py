@@ -124,7 +124,6 @@ class BrowserTests(unittest.TestCase):
         grid=self.page.locator('#grid button')
         grid.nth(0).click()
         self.assertTrue(self.page.locator('#donate').is_disabled())
-        self.assertEqual(self.page.locator('#minnote').inner_text(),'£2 minimum donation')
         self.assertIn('£1.99',self.page.locator('#warning').inner_text())
         grid.nth(198).click()
         self.assertEqual(self.page.locator('#total').inner_text(),'£2.00')

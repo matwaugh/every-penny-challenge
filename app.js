@@ -215,7 +215,6 @@ function artwork(){
     if(view==='mosaic') artwork(); else drawGrid();
     const sum=totalSelection();
     el('total').textContent=format(sum); el('chosen').textContent=selected.size+' square'+(selected.size===1?'':'s');
-    el('minnote').textContent='£2 minimum donation';
     if(sum>0 && sum<200)warn(`Add ${format(200-sum)} more to reach the £2 minimum donation.`);
     el('donate').disabled=sum<200 || !storageReady || Boolean(c.attempt);
     el('resume').classList.toggle('hidden',!c.attempt);
