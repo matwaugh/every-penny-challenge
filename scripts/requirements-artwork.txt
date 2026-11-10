@@ -2,3 +2,4 @@
 # The application itself has no Python or package dependencies.
 numpy==2.3.5
 shapely==2.1.2
+matplotlib==3.10.8

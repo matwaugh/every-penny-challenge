@@ -1,5 +1,5 @@
 """Generate exact-count vector mosaics. Development-only; no browser dependencies.
-Uses custom ribbon geometry, NumPy and Shapely 2.1.2.
+Uses approved rounded-slab outlines, NumPy, Matplotlib and Shapely 2.1.2.
 """
 import json
 import math
@@ -9,7 +9,7 @@ import sys
 sys.path.append('/workspace/.epc-artwork-tools')
 import numpy as np
 from shapely.geometry import Polygon, Point
-from ribbon_geometry import build_ribbon
+from slab_geometry import build_slab
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -120,7 +120,7 @@ def build(digits_only=False):
         if not digits_only:data[str(level)]={}
         for kind in (['digits'] if digits_only else ['digits','sun','flower']):
             if kind=='digits':
-                shape,tiles,pitch=build_ribbon(level,n);silhouette=polygon_svg(shape)
+                shape,tiles,pitch=build_slab(level,n);silhouette=polygon_svg(shape)
                 minx,miny,maxx,maxy=shape.bounds
                 values=[(p,colour(RAINBOW,(p.centroid.y-miny)/(maxy-miny))) for p in tiles]
             else:
@@ -128,15 +128,15 @@ def build(digits_only=False):
                 raw,pitch=radial_tiles(shape,radius,n)
                 values=[(p,colour(SUN if kind=='sun' else FLOWER,t)) for p,t in raw]
                 minx,miny,maxx,maxy=shape.bounds
-            margin=6
+            margin=3 if kind=='digits' else 6
             cells=[]
             for tile,fill in values:
                 # An inset creates white gutters; rounded corners soften the mosaic.
-                inset=tile.buffer(-pitch*.035,join_style='round')
+                inset=tile.buffer(-pitch*(.03 if kind=='digits' else .035),join_style='mitre' if kind=='digits' else 'round')
                 if kind=='digits':
-                    assert not inset.is_empty and inset.geom_type=='Polygon', 'A ribbon tile collapsed while adding gutters'
+                    assert not inset.is_empty and inset.geom_type=='Polygon', 'A numeral tile collapsed while adding gutters'
                 elif inset.is_empty:inset=tile
-                cells.append({'d':compact_svg(polygon_svg(inset,pitch*.11)),'colour':fill})
+                cells.append({'d':compact_svg(polygon_svg(inset,pitch*(.12 if kind=='digits' else .11))),'colour':fill})
             entry={'viewBox':[round(minx-margin,2),round(miny-margin,2),round(maxx-minx+margin*2,2),round(maxy-miny+margin*2,2)],'outline':silhouette,'cells':cells}
             data[str(level)][kind]=entry
             print(level,kind,len(cells),flush=True)
