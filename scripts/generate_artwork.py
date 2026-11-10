@@ -1,5 +1,5 @@
 """Generate exact-count vector mosaics. Development-only; no browser dependencies.
-Uses Matplotlib (glyph outlines), NumPy and Shapely 2.1.2.
+Uses custom ribbon geometry, NumPy and Shapely 2.1.2.
 """
 import json
 import math
@@ -8,40 +8,12 @@ from pathlib import Path
 import sys
 sys.path.append('/workspace/.epc-artwork-tools')
 import numpy as np
-from matplotlib.textpath import TextPath
-from matplotlib.font_manager import FontProperties
-from matplotlib.path import Path as MplPath
-from matplotlib.transforms import Affine2D
-from shapely.geometry import Polygon, Point, box
-from shapely import affinity
-from shapely.ops import unary_union
+from shapely.geometry import Polygon, Point
+from ribbon_geometry import build_ribbon
 
 ROOT=Path(__file__).resolve().parents[1]
-FONT='/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
 
 def fmt(v): return f'{v:.2f}'.rstrip('0').rstrip('.') or '0'
-
-def mpl_svg(path):
-    out=[]
-    for verts,code in path.iter_segments(curves=True):
-        if code==MplPath.CLOSEPOLY: out.append('Z'); continue
-        command={MplPath.MOVETO:'M',MplPath.LINETO:'L',MplPath.CURVE3:'Q',MplPath.CURVE4:'C'}[code]
-        out.append(command+' '.join(fmt(v) for v in verts))
-    return ''.join(out)
-
-def numeric_shape(level):
-    # Place by actual ink bounds, not font advance widths, so 10 has intentional kerning.
-    outlines=[]; offset=0
-    for digit in str(level):
-        glyph=TextPath((0,0),digit,size=600,prop=FontProperties(fname=FONT))
-        bounds=glyph.get_extents()
-        glyph=glyph.transformed(Affine2D().translate(-bounds.xmin,-bounds.ymin).scale(1,-1).translate(offset,bounds.height))
-        outlines.append(glyph);offset+=bounds.width+18
-    compound=MplPath.make_compound_path(*outlines)
-    geometry=Polygon()
-    for ring in compound.to_polygons():
-        if len(ring)>=3: geometry=geometry.symmetric_difference(Polygon(ring).buffer(0))
-    return geometry,mpl_svg(compound)
 
 def polygon_svg(poly, rounding=0):
     if poly.geom_type=='MultiPolygon': return ''.join(polygon_svg(p,rounding) for p in poly.geoms)
@@ -68,36 +40,6 @@ def parts(geometry):
     if geometry.is_empty:return []
     if geometry.geom_type=='Polygon':return [geometry]
     return [p for p in geometry.geoms if p.geom_type=='Polygon']
-
-def numeric_tiles(shape,n):
-    minx,miny,maxx,maxy=shape.bounds
-    def mesh(pitch):
-        result=[]
-        for y in np.arange(miny,maxy,pitch):
-            for x in np.arange(minx,maxx,pitch):
-                result.extend(p for p in parts(shape.intersection(box(x,y,x+pitch,y+pitch))) if p.area>1e-5)
-        return result
-    # Choose the coarsest full-cover grid with at least n fragments.
-    low=math.sqrt(shape.area/n)*.75;high=math.sqrt(shape.area/n)*1.65
-    best=None
-    for _ in range(18):
-        pitch=(low+high)/2;tiles=mesh(pitch)
-        if len(tiles)>=n:
-            if best is None or len(tiles)<len(best[1]):best=(pitch,tiles)
-            low=pitch
-        else:high=pitch
-    pitch,tiles=best
-    # Merge the smallest edge fragments along a shared edge, avoiding sliver squares.
-    while len(tiles)>n:
-        index=min(range(len(tiles)),key=lambda i:tiles[i].area)
-        tile=tiles.pop(index)
-        neighbours=[(tile.boundary.intersection(p.boundary).length,i) for i,p in enumerate(tiles) if tile.distance(p)<.001]
-        if neighbours: target=max(neighbours)[1]
-        else:target=min(range(len(tiles)),key=lambda i:tile.distance(tiles[i]))
-        tiles[target]=tiles[target].union(tile).buffer(0)
-    assert len(tiles)==n
-    assert abs(sum(p.area for p in tiles)-shape.area)<.05
-    return sorted(tiles,key=lambda p:(round(p.centroid.y/pitch),p.centroid.x)),pitch
 
 RAINBOW=['#f45c70','#ff9245','#f3ca3e','#7ec86d','#31b6b4','#508bd8','#9465d4']
 FLOWER=['#f9d846','#c7d94d','#6cc67e','#36b7bf','#7380d7','#c975cd','#ee9dbf']
@@ -168,13 +110,17 @@ def compact_svg(path):
         current=points[-1]
     return ''.join(result)
 
-def build():
-    data={}
+def build(digits_only=False):
+    if digits_only:
+        saved=(ROOT/'artwork-data.js').read_text()
+        data=json.loads(saved.split('window.PennyArtwork=',1)[1].rsplit(';',1)[0])
+    else:data={}
     for level in [2,5,10]:
-        n=level*100;data[str(level)]={}
-        for kind in ['digits','sun','flower']:
+        n=level*100
+        if not digits_only:data[str(level)]={}
+        for kind in (['digits'] if digits_only else ['digits','sun','flower']):
             if kind=='digits':
-                shape,silhouette=numeric_shape(level);tiles,pitch=numeric_tiles(shape,n)
+                shape,tiles,pitch=build_ribbon(level,n);silhouette=polygon_svg(shape)
                 minx,miny,maxx,maxy=shape.bounds
                 values=[(p,colour(RAINBOW,(p.centroid.y-miny)/(maxy-miny))) for p in tiles]
             else:
@@ -187,11 +133,13 @@ def build():
             for tile,fill in values:
                 # An inset creates white gutters; rounded corners soften the mosaic.
                 inset=tile.buffer(-pitch*.035,join_style='round')
-                if inset.is_empty:inset=tile
+                if kind=='digits':
+                    assert not inset.is_empty and inset.geom_type=='Polygon', 'A ribbon tile collapsed while adding gutters'
+                elif inset.is_empty:inset=tile
                 cells.append({'d':compact_svg(polygon_svg(inset,pitch*.11)),'colour':fill})
             entry={'viewBox':[round(minx-margin,2),round(miny-margin,2),round(maxx-minx+margin*2,2),round(maxy-miny+margin*2,2)],'outline':silhouette,'cells':cells}
             data[str(level)][kind]=entry
             print(level,kind,len(cells),flush=True)
     (ROOT/'artwork-data.js').write_text('/* Generated vector geometry: scripts/generate_artwork.py */\nwindow.PennyArtwork='+json.dumps(data,separators=(',',':'))+';\n')
 
-if __name__=='__main__':build()
+if __name__=='__main__':build(digits_only='--digits-only' in sys.argv)
